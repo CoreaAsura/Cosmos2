@@ -1,46 +1,50 @@
 import streamlit as st
 import requests
 import urllib.parse
+import time
 
 st.title("🛰️ TLE 호출 for MSSB")
 
-# 세션 초기화
 if "tle_list" not in st.session_state:
     st.session_state["tle_list"] = []
 
-# 입력
 sat_name = st.text_input("🛰️ 위성명칭 (예: STARLINK-32502)", key="name_input")
 norad_id = st.text_input("🔢 NORAD ID (예: 62116)", key="id_input")
 
-# TLE 호출 함수 (엔드포인트 fallback + URL 인코딩 + 타임아웃 연장)
 def fetch_tle(query, mode="name"):
     urls = [
         "https://celestrak.org/NORAD/elements/gp.php",
-        "https://celestrak.net/NORAD/elements/gp.php"
+        "https://celestrak.net/NORAD/elements/gp.php",
     ]
     param = "NAME" if mode == "name" else "CATNR"
     encoded_query = urllib.parse.quote(query)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; TLEFetcher/1.0; +https://example.com)"
-    }
+    headers = {"User-Agent": "Mozilla/5.0 (TLEFetcher/1.0)"}
 
+    # 1. API 우선 시도
     for base_url in urls:
-        url = f"{base_url}?{param}={encoded_query}&FORMAT=tle"
-        try:
-            st.write(f"📡 {base_url} 에 요청 중...")
-            r = requests.get(url, headers=headers, timeout=(10, 30))  # 연결 10초, 응답 30초
-            lines = r.text.strip().splitlines()
+        for attempt in range(5):  # 5회까지 재시도
+            url = f"{base_url}?{param}={encoded_query}&FORMAT=tle"
+            try:
+                r = requests.get(url, headers=headers, timeout=(10, 30))
+                lines = r.text.strip().splitlines()
+                if len(lines) >= 3:
+                    return f"{lines[0]}\n{lines[1]}\n{lines[2]}"
+            except Exception as e:
+                st.warning(f"⚠️ {base_url} 연결 실패 (시도 {attempt+1}/5): {e}")
+                time.sleep(2 * (attempt + 1))  # 지수 백오프
 
-            if len(lines) >= 3:
-                return f"{lines[0]}\n{lines[1]}\n{lines[2]}"
-            else:
-                st.warning(f"⚠️ {base_url} 응답은 있었지만 TLE 형식이 아님.")
-        except Exception as e:
-            st.warning(f"⚠️ {base_url} 연결 실패: {e}")
+    # 2. 카탈로그 파일에서 수동 매칭 시도 (ISS 예시)
+    try:
+        r = requests.get("https://celestrak.org/NORAD/elements/stations.txt", timeout=20)
+        lines = r.text.strip().splitlines()
+        for i in range(0, len(lines), 3):
+            if query in lines[i] or query == lines[i+1].split()[1]:  # 이름 또는 NORAD ID 매칭
+                return f"{lines[i]}\n{lines[i+1]}\n{lines[i+2]}"
+    except Exception as e:
+        st.warning(f"⚠️ 카탈로그 백업 소스 실패: {e}")
 
     return None
 
-# 호출 버튼
 if st.button("📡 TLE 호출"):
     query, tle = "", None
 
@@ -59,9 +63,8 @@ if st.button("📡 TLE 호출"):
     else:
         st.error(f"❌ '{query}'에 대한 TLE 데이터를 찾을 수 없습니다.")
 
-# 출력 및 복사 UI
 if st.session_state["tle_list"]:
     st.subheader("📄 분석용 TLE 누적 출력")
-    combined_text = "\n".join(st.session_state["tle_list"])  # 빈 줄 없음 유지
+    combined_text = "\n".join(st.session_state["tle_list"])
     st.code(combined_text, language="text")
     st.info("※ 위 내용 우측 상단의 복사 버튼을 눌러 복사하고, 분석 앱에 붙여넣기 하세요.")
