@@ -3,7 +3,7 @@ import requests
 
 # Space-Track API URL
 LOGIN_URL = "https://www.space-track.org/ajaxauth/login"
-TLE_URL = "https://www.space-track.org/basicspacedata/query/class/tle_latest/ORDINAL/1"
+TLE_BASE_URL = "https://www.space-track.org/basicspacedata/query/class/tle_latest"
 
 # --- Streamlit secrets 설정 ---
 # st.secrets["spacetrack"]["username"]
@@ -16,7 +16,7 @@ if "tle_list" not in st.session_state:
 def get_tle(query):
     """
     Space-Track에서 위성이름 또는 NORAD ID로 최신 TLE 1세트 가져오기
-    (조회할 때마다 로그인 + 쿠키 인증 확인)
+    (조회할 때마다 로그인 + URL 구조 수정)
     """
     session = requests.Session()
 
@@ -27,15 +27,15 @@ def get_tle(query):
     }
     login_response = session.post(LOGIN_URL, data=login_payload)
 
-    # 로그인 실패 처리
-    if login_response.status_code != 200 or "Set-Cookie" not in login_response.headers:
+    # 로그인 실패 또는 쿠키 누락 처리
+    if login_response.status_code != 200 or not session.cookies:
         return f"🚨 로그인 실패 또는 인증 쿠키 누락: {login_response.status_code}"
 
-    # 위성 이름 또는 NORAD ID에 따라 URL 구성
-if query.isdigit():
-    url = f"{TLE_URL}/NORAD_CAT_ID/{query}/ORDINAL/1/format/tle"
-else:
-    url = f"{TLE_URL}/OBJECT_NAME/{query}/ORDINAL/1/format/tle"
+    # URL 구성 (올바른 순서로)
+    if query.isdigit():
+        url = f"{TLE_BASE_URL}/NORAD_CAT_ID/{query}/ORDINAL/1/format/tle"
+    else:
+        url = f"{TLE_BASE_URL}/OBJECT_NAME/{query}/ORDINAL/1/format/tle"
 
     # TLE 데이터 요청
     response = session.get(url)
@@ -74,4 +74,3 @@ if st.session_state["tle_list"]:
     combined_tle = "\n".join(st.session_state["tle_list"])
     st.code(combined_tle, language="text")
     st.info("※ 위 코드 블록 우측 상단의 복사 버튼을 눌러 전체 TLE를 복사하세요.")
-
