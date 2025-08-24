@@ -32,10 +32,10 @@ def get_tle(query):
         return f"🚨 로그인 실패 또는 인증 쿠키 누락: {login_response.status_code}"
 
     # 위성 이름 또는 NORAD ID에 따라 URL 구성
-    if query.isdigit():
-        url = f"{TLE_URL}/NORAD_CAT_ID/{query}/orderby/epoch desc/format=tle"
-    else:
-        url = f"{TLE_URL}/OBJECT_NAME/{query}/orderby/epoch desc/format=tle"
+if query.isdigit():
+    url = f"{TLE_URL}/NORAD_CAT_ID/{query}/ORDINAL/1/format/tle"
+else:
+    url = f"{TLE_URL}/OBJECT_NAME/{query}/ORDINAL/1/format/tle"
 
     # TLE 데이터 요청
     response = session.get(url)
@@ -74,3 +74,4 @@ if st.session_state["tle_list"]:
     combined_tle = "\n".join(st.session_state["tle_list"])
     st.code(combined_tle, language="text")
     st.info("※ 위 코드 블록 우측 상단의 복사 버튼을 눌러 전체 TLE를 복사하세요.")
+
