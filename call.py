@@ -9,26 +9,27 @@ TLE_URL = "https://www.space-track.org/basicspacedata/query/class/tle_latest/ORD
 # st.secrets["spacetrack"]["username"]
 # st.secrets["spacetrack"]["password"]
 
+# 세션 상태에 TLE 누적 리스트 저장
+if "tle_list" not in st.session_state:
+    st.session_state["tle_list"] = []
+
 def get_tle(query):
     """
     Space-Track에서 위성이름 또는 NORAD ID로 최신 TLE 1세트 가져오기
     """
     session = requests.Session()
 
-    # 로그인
     login_payload = {
         "identity": st.secrets["spacetrack"]["username"],
         "password": st.secrets["spacetrack"]["password"]
     }
     session.post(LOGIN_URL, data=login_payload)
 
-    # 입력값이 숫자면 NORAD ID, 아니면 SATNAME 검색
     if query.isdigit():
         url = f"{TLE_URL}/NORAD_CAT_ID/{query}/orderby/epoch desc/format/tle"
     else:
         url = f"{TLE_URL}/OBJECT_NAME/{query}/orderby/epoch desc/format/tle"
 
-    # 최신 TLE 1개 가져오기
     response = session.get(url)
     if response.status_code != 200:
         return f"조회 오류: {response.status_code}"
@@ -37,7 +38,6 @@ def get_tle(query):
     if not tle_text:
         return "검색 결과 없음"
 
-    # TLE는 보통 3줄 단위 (이름 + Line1 + Line2)
     lines = tle_text.splitlines()
     if len(lines) >= 2:
         satname = query
@@ -47,7 +47,6 @@ def get_tle(query):
     else:
         return "TLE 데이터 형식 오류"
 
-
 # --- Streamlit UI ---
 st.title("Space-Track TLE 조회기")
 
@@ -56,15 +55,14 @@ query = st.text_input("위성이름 또는 NORAD ID 입력")
 if st.button("TLE 조회"):
     tle_result = get_tle(query)
     if "오류" not in tle_result and "없음" not in tle_result:
-        st.text_area("TLE 결과", tle_result, height=100)
-
-        # 복사 버튼
-        st.code(tle_result)
-        st.download_button(
-            label="TLE 복사/저장",
-            data=tle_result,
-            file_name=f"{query}_tle.txt",
-            mime="text/plain"
-        )
+        st.session_state["tle_list"].append(tle_result)
+        st.success(f"✅ '{query}' TLE 조회 성공")
     else:
         st.error(tle_result)
+
+# 누적된 TLE 출력
+if st.session_state["tle_list"]:
+    st.subheader("📄 누적된 TLE 결과")
+    combined_tle = "\n".join(st.session_state["tle_list"])
+    st.code(combined_tle, language="text")
+    st.info("※ 위 코드 블록 우측 상단의 복사 버튼을 눌러 전체 TLE를 복사하세요.")
