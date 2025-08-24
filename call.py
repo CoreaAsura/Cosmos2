@@ -31,9 +31,9 @@ def get_tle(query):
 
     # 위성 이름 또는 NORAD ID에 따라 URL 구성
     if query.isdigit():
-        url = f"{TLE_URL}/NORAD_CAT_ID/{query}/orderby/epoch desc/format/tle"
+        url = f"{TLE_URL}/NORAD_CAT_ID/{query}/orderby/epoch desc/format=tle"
     else:
-        url = f"{TLE_URL}/OBJECT_NAME/{query}/orderby/epoch desc/format/tle"
+        url = f"{TLE_URL}/OBJECT_NAME/{query}/orderby/epoch desc/format=tle"
 
     # TLE 데이터 요청
     response = session.get(url)
@@ -45,11 +45,11 @@ def get_tle(query):
         return "🔍 검색 결과 없음"
 
     lines = tle_text.splitlines()
-    if len(lines) >= 3:
-        name = lines[0]
-        line1 = lines[1]
-        line2 = lines[2]
-        return f"{name}\n{line1}\n{line2}"
+    if len(lines) == 3:
+        return "\n".join(lines)
+    elif len(lines) == 2:
+        # 위성 이름이 누락된 경우, 입력값을 이름으로 사용
+        return f"{query}\n{lines[0]}\n{lines[1]}"
     else:
         return "⚠️ TLE 데이터 형식 오류"
 
