@@ -62,4 +62,5 @@ if "tle_list" not in st.session_state:
     st.session_state["tle_list"] = []
 
 if st.button("조회"):
-    tle = get_latest_tl
+    tle = get_latest_tle
+
