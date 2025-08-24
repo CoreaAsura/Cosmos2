@@ -26,7 +26,6 @@ def get_tle(query):
         "password": st.secrets["spacetrack"]["password"]
     }
     login_response = session.post(LOGIN_URL, data=login_payload)
-
     if login_response.status_code != 200:
         return f"🚨 로그인 실패: {login_response.status_code}"
 
@@ -46,11 +45,11 @@ def get_tle(query):
         return "🔍 검색 결과 없음"
 
     lines = tle_text.splitlines()
-    if len(lines) >= 2:
-        satname = query
-        line1 = lines[0]
-        line2 = lines[1]
-        return f"{satname}\n{line1}\n{line2}"
+    if len(lines) >= 3:
+        name = lines[0]
+        line1 = lines[1]
+        line2 = lines[2]
+        return f"{name}\n{line1}\n{line2}"
     else:
         return "⚠️ TLE 데이터 형식 오류"
 
