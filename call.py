@@ -30,36 +30,31 @@ def get_session():
         st.stop()
     return s
 
-# ── 최신 TLE 1개만 가져오기 (이름 또는 NORAD ID)
+# ── 최신 TLE 1개만 가져오기
 def fetch_latest_tle(query: str):
     s = get_session()
-
-    # 숫자면 NORAD, 아니면 OBJECT_NAME
     if query.isdigit():
-        url = f"https://www.space-track.org/basicspacedata/query/class/tle_latest/NORAD_CAT_ID/{query}/ORDINAL/1/format/json"
+        url = f"https://www.space-track.org/basicspacedata/query/class/tle_latest/NORAD_CAT_ID/{query}/ORDINAL/1/format=json"
     else:
-        # OBJECT_NAME은 정확 일치 경로이므로 인코딩/대문자 시도
         q = urllib.parse.quote(query)
         url = f"https://www.space-track.org/basicspacedata/query/class/tle_latest/OBJECT_NAME/{q}/ORDINAL/1/format/json"
 
     r = s.get(url, timeout=30)
     if r.status_code != 200:
         return None
-
     data = r.json()
-    if not data:
-        # 이름 입력이 대소문자/공백 때문에 실패할 수 있어 대문자 재시도
-        if not query.isdigit():
-            q2 = urllib.parse.quote(query.upper())
-            url2 = f"https://www.space-track.org/basicspacedata/query/class/tle_latest/OBJECT_NAME/{q2}/ORDINAL/1/format/json"
-            r2 = s.get(url2, timeout=30)
-            if r2.status_code == 200 and r2.text.strip():
-                data = r2.json()
+    if not data and not query.isdigit():
+        q2 = urllib.parse.quote(query.upper())
+        r2 = s.get(
+            f"https://www.space-track.org/basicspacedata/query/class/tle_latest/OBJECT_NAME/{q2}/ORDINAL/1/format/json",
+            timeout=30,
+        )
+        if r2.status_code == 200:
+            data = r2.json()
 
     if not data:
         return None
 
-    # tle_latest + ORDINAL/1 ⇒ 최신 1개
     rec = data[0]
     return rec["OBJECT_NAME"], rec["TLE_LINE1"], rec["TLE_LINE2"]
 
@@ -70,38 +65,32 @@ col1, col2 = st.columns(2)
 with col1:
     if st.button("📥 TLE 조회"):
         q = user_input.strip()
-        if not q:
-            st.warning("입력값을 넣어주세요.")
-        else:
+        if q:
             with st.spinner("조회 중…"):
                 res = fetch_latest_tle(q)
             if res:
                 name, l1, l2 = res
-                block = f"{name}\n{l1}\n{l2}"
-                st.session_state.tle_blocks.append(block)
+                st.session_state.tle_blocks.append(f"{name}\n{l1}\n{l2}")
             else:
                 st.error("해당 입력으로 TLE을 찾지 못했습니다.")
 with col2:
     if st.button("🧹 누적 결과 지우기"):
         st.session_state.tle_blocks.clear()
 
-# ── 누적 출력 (줄 간격 없이)
+# ── 출력
 if st.session_state.tle_blocks:
-    output_text = "\n".join(st.session_state.tle_blocks)  # 빈 줄 추가 없음
-    st.text_area("누적된 TLE (복사 대상)", value=output_text, height=320, key="tle_out")
+    output_text = "\n".join(st.session_state.tle_blocks)
 
-    # ── 클립보드 복사 버튼 (JS)
-    #   안전하게 복사하기 위해 숨김 textarea에 내용을 넣고 JS로 복사
-    hidden_payload = html.escape(output_text)
+    # 텍스트 영역 + copy 버튼을 하나의 블록으로 구성
     st.markdown(
         f"""
-        <textarea id="__tle_copy_buf" style="position:absolute;left:-9999px;top:-9999px;">{hidden_payload}</textarea>
-        <button
-            onclick="navigator.clipboard.writeText(document.getElementById('__tle_copy_buf').value)
-                     .then(()=>{{alert('✅ 클립보드로 복사되었습니다.');}})
-                     .catch(()=>{{alert('❌ 복사 실패: 브라우저 권한을 확인하세요.');}})">
-            📋 클립보드로 복사
-        </button>
+        <div style="position: relative">
+            <textarea id="tle_out" style="width:100%;height:320px;" readonly>{html.escape(output_text)}</textarea>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('tle_out').value)"
+                    style="position: absolute; top: 5px; right: 5px; padding:4px 8px; font-size:12px;">
+                Copy to clipboard
+            </button>
+        </div>
         """,
         unsafe_allow_html=True
     )
