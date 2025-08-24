@@ -9,34 +9,41 @@ TLE_URL = "https://www.space-track.org/basicspacedata/query/class/tle_latest/ORD
 # st.secrets["spacetrack"]["username"]
 # st.secrets["spacetrack"]["password"]
 
-# 세션 상태에 TLE 누적 리스트 저장
+# TLE 누적 저장용 세션 상태
 if "tle_list" not in st.session_state:
     st.session_state["tle_list"] = []
 
 def get_tle(query):
     """
     Space-Track에서 위성이름 또는 NORAD ID로 최신 TLE 1세트 가져오기
+    (조회할 때마다 로그인)
     """
     session = requests.Session()
 
+    # 로그인 요청
     login_payload = {
         "identity": st.secrets["spacetrack"]["username"],
         "password": st.secrets["spacetrack"]["password"]
     }
-    session.post(LOGIN_URL, data=login_payload)
+    login_response = session.post(LOGIN_URL, data=login_payload)
 
+    if login_response.status_code != 200:
+        return f"🚨 로그인 실패: {login_response.status_code}"
+
+    # 위성 이름 또는 NORAD ID에 따라 URL 구성
     if query.isdigit():
         url = f"{TLE_URL}/NORAD_CAT_ID/{query}/orderby/epoch desc/format/tle"
     else:
         url = f"{TLE_URL}/OBJECT_NAME/{query}/orderby/epoch desc/format/tle"
 
+    # TLE 데이터 요청
     response = session.get(url)
     if response.status_code != 200:
-        return f"조회 오류: {response.status_code}"
+        return f"🚨 조회 오류: {response.status_code}"
 
     tle_text = response.text.strip()
     if not tle_text:
-        return "검색 결과 없음"
+        return "🔍 검색 결과 없음"
 
     lines = tle_text.splitlines()
     if len(lines) >= 2:
@@ -45,16 +52,16 @@ def get_tle(query):
         line2 = lines[1]
         return f"{satname}\n{line1}\n{line2}"
     else:
-        return "TLE 데이터 형식 오류"
+        return "⚠️ TLE 데이터 형식 오류"
 
 # --- Streamlit UI ---
-st.title("Space-Track TLE 조회기")
+st.title("🛰️ Space-Track TLE 조회기")
 
 query = st.text_input("위성이름 또는 NORAD ID 입력")
 
 if st.button("TLE 조회"):
     tle_result = get_tle(query)
-    if "오류" not in tle_result and "없음" not in tle_result:
+    if "오류" not in tle_result and "없음" not in tle_result and "실패" not in tle_result:
         st.session_state["tle_list"].append(tle_result)
         st.success(f"✅ '{query}' TLE 조회 성공")
     else:
