@@ -16,7 +16,7 @@ if "tle_list" not in st.session_state:
 def get_tle(query):
     """
     Space-Track에서 위성이름 또는 NORAD ID로 최신 TLE 1세트 가져오기
-    (조회할 때마다 로그인)
+    (조회할 때마다 로그인 + 쿠키 인증 확인)
     """
     session = requests.Session()
 
@@ -26,8 +26,10 @@ def get_tle(query):
         "password": st.secrets["spacetrack"]["password"]
     }
     login_response = session.post(LOGIN_URL, data=login_payload)
-    if login_response.status_code != 200:
-        return f"🚨 로그인 실패: {login_response.status_code}"
+
+    # 로그인 실패 처리
+    if login_response.status_code != 200 or "Set-Cookie" not in login_response.headers:
+        return f"🚨 로그인 실패 또는 인증 쿠키 누락: {login_response.status_code}"
 
     # 위성 이름 또는 NORAD ID에 따라 URL 구성
     if query.isdigit():
@@ -60,7 +62,7 @@ query = st.text_input("위성이름 또는 NORAD ID 입력")
 
 if st.button("TLE 조회"):
     tle_result = get_tle(query)
-    if "오류" not in tle_result and "없음" not in tle_result and "실패" not in tle_result:
+    if all(keyword not in tle_result for keyword in ["오류", "없음", "실패"]):
         st.session_state["tle_list"].append(tle_result)
         st.success(f"✅ '{query}' TLE 조회 성공")
     else:
