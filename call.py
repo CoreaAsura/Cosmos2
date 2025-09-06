@@ -4,7 +4,7 @@ import requests
 # Space-Track API URL
 LOGIN_URL = "https://www.space-track.org/ajaxauth/login"
 TLE_URL = "https://www.space-track.org/basicspacedata/query/class/tle_latest"
-SATCAT_URL = "https://www.space-track.org/basicspacedata/query/class/satcat"
+SATCAT_SEARCH_URL = "https://www.space-track.org/basicspacedata/query/class/satcat/OBJECT_NAME"
 
 # 세션 상태 초기화
 if "tle_list" not in st.session_state:
@@ -21,55 +21,51 @@ def login_to_spacetrack():
         return session
     return None
 
-def get_satellite_name(session, norad_id):
-    url = f"{SATCAT_URL}/NORAD_CAT_ID/{norad_id}/format/json"
+def search_satellites_by_name(session, partial_name):
+    url = f"{SATCAT_SEARCH_URL}/{partial_name}*/orderby/NORAD_CAT_ID/format/json"
     response = session.get(url)
     if response.status_code == 200:
         data = response.json()
-        if data and "OBJECT_NAME" in data[0]:
-            return data[0]["OBJECT_NAME"]
-    return f"UNKNOWN-{norad_id}"
+        return [
+            f"{item['OBJECT_NAME']} ({item['NORAD_CAT_ID']})"
+            for item in data if "OBJECT_NAME" in item and "NORAD_CAT_ID" in item
+        ]
+    return []
 
-def get_tle(query):
-    session = login_to_spacetrack()
-    if not session:
-        return "🚨 로그인 실패. 인증 정보를 확인하세요."
-
-    # URL 구성
-    if query.isdigit():
-        url = f"{TLE_URL}/NORAD_CAT_ID/{query}/ORDINAL/1/format/tle"
-    else:
-        url = f"{TLE_URL}/OBJECT_NAME/{query}/ORDINAL/1/format/tle"
-
+def get_tle_by_norad(session, norad_id):
+    url = f"{TLE_URL}/NORAD_CAT_ID/{norad_id}/ORDINAL/1/format/tle"
     response = session.get(url)
     if response.status_code != 200:
         return f"🚨 조회 오류: {response.status_code}"
-
     tle_text = response.text.strip()
     lines = tle_text.splitlines()
-
-    # 위성이름 추출
-    if len(lines) == 3:
-        name_line = lines[0].strip()
-    elif len(lines) == 2:
-        # 위성이름이 누락된 경우, NORAD ID로 이름 조회
-        norad_id = lines[0].split()[1] if lines else query
-        name_line = get_satellite_name(session, norad_id)
-    else:
-        return "⚠️ TLE 형식 오류"
-
-    return f"{name_line}\n{lines[-2]}\n{lines[-1]}"
+    if len(lines) >= 2:
+        return f"{lines[0] if len(lines)==3 else f'NORAD {norad_id}'}\n{lines[-2]}\n{lines[-1]}"
+    return "⚠️ TLE 형식 오류"
 
 # --- Streamlit UI ---
-st.title("🛰️ Space-Track TLE 조회기")
+st.title("🛰️ TLE 호출 for MSSB")
 
-query = st.text_input("위성이름 또는 NORAD ID 입력")
+session = login_to_spacetrack()
+if not session:
+    st.error("🚨 Space-Track 로그인 실패. 인증 정보를 확인하세요.")
+    st.stop()
 
-if st.button("TLE 조회"):
-    tle_result = get_tle(query)
+partial_name = st.text_input("위성이름 일부 입력 (예: COSMOS, STARLINK 등)")
+satellite_options = []
+
+if partial_name.strip():
+    satellite_options = search_satellites_by_name(session, partial_name.strip())
+
+selected_sat = st.selectbox("관련 위성 선택", satellite_options) if satellite_options else None
+
+if selected_sat and st.button("TLE 조회"):
+    # NORAD ID 추출
+    norad_id = selected_sat.split("(")[-1].replace(")", "").strip()
+    tle_result = get_tle_by_norad(session, norad_id)
     if all(keyword not in tle_result for keyword in ["오류", "없음", "실패"]):
         st.session_state["tle_list"].append(tle_result)
-        st.success(f"✅ '{query}' TLE 조회 성공")
+        st.success(f"✅ '{selected_sat}' TLE 조회 성공")
     else:
         st.error(tle_result)
 
